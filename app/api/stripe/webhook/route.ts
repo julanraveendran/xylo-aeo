@@ -4,6 +4,12 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
+type StripeSubscriptionRaw = Stripe.Subscription & { current_period_end: number };
+
+function periodEnd(sub: Stripe.Subscription): string {
+  const ts = (sub as unknown as StripeSubscriptionRaw).current_period_end;
+  return new Date(ts * 1000).toISOString();
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -31,7 +37,6 @@ export async function POST(req: NextRequest) {
 
         if (!userId) break;
 
-        // Fetch full subscription to get current_period_end and status
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
         await supabaseAdmin
@@ -41,7 +46,7 @@ export async function POST(req: NextRequest) {
             stripe_customer_id: customerId,
             stripe_subscription_id: subscriptionId,
             status: subscription.status,
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_end: periodEnd(subscription),
           }, { onConflict: 'user_id' });
 
         break;
@@ -55,7 +60,7 @@ export async function POST(req: NextRequest) {
           .from('subscriptions')
           .update({
             status: subscription.status,
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+            current_period_end: periodEnd(subscription),
           })
           .eq('stripe_customer_id', customerId);
 
